@@ -16,8 +16,8 @@ class Home extends BaseController
 
         if ($this->request->getMethod() === 'POST') {
             $rules = [
-                'username' => 'required|max_length[50]',
-                'password' => 'required|max_length[8]',
+                'username' => 'required|max_length[255]',
+                'password' => 'required',
             ];
 
             if (! $this->validate($rules)) {
@@ -27,11 +27,18 @@ class Home extends BaseController
             $credentials = $this->request->getPost(['username', 'password']);
             $user = (new UserModel())->where('username', $credentials['username'])->first();
 
-            // New accounts should store passwords with password_hash(). The second
-            // condition keeps existing classroom databases with plaintext passwords working.
-            $validPassword = $user !== null
-                && (password_verify($credentials['password'], $user['password'])
-                    || hash_equals((string) $user['password'], (string) $credentials['password']));
+            $validPassword = false;
+            if ($user !== null) {
+                $storedPassword = (string) ($user['password'] ?? '');
+
+                if (password_verify($credentials['password'], $storedPassword)) {
+                    $validPassword = true;
+                } elseif (hash_equals($storedPassword, $credentials['password'])) {
+                    $validPassword = true;
+                    $hashedPassword = password_hash($credentials['password'], PASSWORD_DEFAULT);
+                    (new UserModel())->update($user['id'], ['password' => $hashedPassword]);
+                }
+            }
 
             if (! $validPassword) {
                 return redirect()->back()->withInput()->with('error', 'Invalid username or password.');
